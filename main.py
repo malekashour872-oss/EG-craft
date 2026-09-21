@@ -18,7 +18,7 @@ import os
 import sys
 from typing import Optional
 
-from settings import Settings
+from settings import Settings, load
 
 log = logging.getLogger("egcraft.main")
 
@@ -67,7 +67,7 @@ class Game:
             self.touch = TouchBridge()
             if self.touch.is_mobile:
                 log.info("Running under pygbag/mobile — "
-                          "touch controls will be applied per-frame.")
+                         "touch controls will be applied per-frame.")
         except Exception as exc:  # noqa: BLE001
             log.warning("TouchBridge init failed: %r", exc)
             self.touch = None
@@ -98,7 +98,7 @@ class Game:
 
 
 def make_settings() -> Settings:
-    return Settings.load()
+    return load()
 
 
 def setup_environment(headless: bool) -> None:
@@ -134,9 +134,9 @@ async def aio_main() -> int:  # pragma: no cover
     return await _async_main()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────�[...]
 # Vercel compatibility stub
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────�[...]
 # EG Craft is deployed as a STATIC pygbag bundle (Python → WebAssembly),
 # NOT as a Python serverless function. However, when Vercel detects
 # `main.py` + `requirements.txt` at the project root, its Python runtime
@@ -149,7 +149,7 @@ async def aio_main() -> int:  # pragma: no cover
 # deployment is the static `build/web/` directory produced by pygbag.
 # If a request ever reaches it (e.g. misconfigured routing), it returns
 # a 200 OK pointing the user at the game.
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────�[...]
 async def _vercel_asgi_app(scope, receive, send):  # type: ignore[no-untyped-def]
     """Minimal ASGI v3.0 stub for Vercel build-time auto-detection.
 
