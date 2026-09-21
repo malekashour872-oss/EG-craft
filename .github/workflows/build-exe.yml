@@ -1,0 +1,80 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "**.py"
+      - "assets/**"
+      - "requirements.txt"
+      - ".github/workflows/build-exe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-exe:
+    name: Build EG Craft EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run smoke tests
+        shell: pwsh
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          EGCRAFT_HEADLESS: "1"
+        run: python run.py --smoke --frames 1
+
+      - name: Build EXE with PyInstaller
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --windowed `
+            --name EG-Craft `
+            --add-data "assets;assets" `
+            --collect-all pygame `
+            --collect-all OpenGL `
+            main.py
+
+      - name: Verify EXE was created
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/EG-Craft/EG-Craft.exe")) {
+            Write-Error "EXE was not created"
+            exit 1
+          }
+
+      - name: Create ZIP file
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "dist/EG-Craft/*" `
+            -DestinationPath "EG-Craft-windows.zip" `
+            -Force
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: EG-Craft-windows
+          path: EG-Craft-windows.zip
+          if-no-files-found: error
+          retention-days: 30
