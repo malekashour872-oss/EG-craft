@@ -4,19 +4,13 @@
 # written permission is prohibited.
 # هذا الملف مملوك ملكية مالك حسن عاشور — يُمنع النسخ أو التوزيع دون إذن
 
-"""Touch input bridge for the pygbag web build.
-
-Reads the JS-side ``window.EGC.input`` object (populated by
-``web/mobile.js``) and exposes it as a Python-side input state.
-
-Spec ref: extension to §5.1 — when running under pygbag/Emscripten,
-the window event pump also consumes the touch-bridge state.
-"""
+"""Touch input bridge for the pygbag web build."""
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+import pygame
 
 log = logging.getLogger("egcraft.touch")
 
@@ -25,9 +19,9 @@ log = logging.getLogger("egcraft.touch")
 class TouchInputState:
     """Mirror of window.EGC.input on the JS side."""
 
-    move_x: float = 0.0       # -1..1 strafe
-    move_y: float = 0.0       # -1..1 forward
-    look_dx: float = 0.0      # delta since last frame
+    move_x: float = 0.0
+    move_y: float = 0.0
+    look_dx: float = 0.0
     look_dy: float = 0.0
     jump: bool = False
     sneak: bool = False
@@ -38,25 +32,18 @@ class TouchInputState:
     hotbar_index: int = 0
 
     def reset_deltas(self) -> None:
-        """Call after each frame to clear per-frame deltas."""
         self.look_dx = 0.0
         self.look_dy = 0.0
-        # Edge-triggered flags
         self.fly_toggle = False
         self.inv_toggle = False
 
 
 class TouchBridge:
-    """Bridges JS touch input → Python TouchInputState.
-
-    On desktop (non-pygbag) the bridge is a no-op and reports
-    ``is_mobile = False``.
-    """
+    """Bridge JS touch input to the pygame-compatible window state."""
 
     def __init__(self) -> None:
         self.is_mobile = self._detect_pygbag()
         self.state = TouchInputState()
-        self._js_obj = None
 
     def _detect_pygbag(self) -> bool:
         try:
@@ -67,16 +54,12 @@ class TouchBridge:
             return False
 
     def _get_js_input(self) -> TouchInputState:
-        """Fetch the window.EGC.input object via JS interop."""
         if not self.is_mobile:
             return self.state
         try:
-            # pygbag/pythonjs interop
             import js  # type: ignore
             egc = getattr(js.window, "EGC", None)
-            if egc is None:
-                return self.state
-            inp = getattr(egc, "input", None)
+            inp = getattr(egc, "input", None) if egc is not None else None
             if inp is None:
                 return self.state
             s = self.state
@@ -96,56 +79,22 @@ class TouchBridge:
         return self.state
 
     def poll(self) -> TouchInputState:
-        """Return the current touch input state."""
-        if not self.is_mobile:
-            return self.state
-        return self._get_js_input()
+        return self._get_js_input() if self.is_mobile else self.state
 
     def apply_to_window(self, window) -> None:
-        """Mutate a Window's input state with touch input.
-
-        Called every frame; the main loop converts this to the same
-        keyboard/mouse events that pygame uses.
-        """
         if not self.is_mobile:
             return
         s = self._get_js_input()
-        # Inject synthetic key states (WASD-equivalent)
-        if s.move_y > 0.3:
-            window.keys[ord('w')] = True
-        else:
-            window.keys.pop(ord('w'), None)
-        if s.move_y < -0.3:
-            window.keys[ord('s')] = True
-        else:
-            window.keys.pop(ord('s'), None)
-        if s.move_x > 0.3:
-            window.keys[ord('d')] = True
-        else:
-            window.keys.pop(ord('d'), None)
-        if s.move_x < -0.3:
-            window.keys[ord('a')] = True
-        else:
-            window.keys.pop(ord('a'), None)
-        # Jump / sneak
-        window.keys[pygame_K_SPACE if False else 32] = s.jump  # K_SPACE = 32
-        window.keys[pygame_K_LSHIFT if False else 1073742052] = s.sneak
-        # Mouse buttons (1=left, 3=right)
-        if s.break_held:
-            window.mouse_buttons[1] = True
-        else:
-            window.mouse_buttons.pop(1, None)
-        if s.place_held:
-            window.mouse_buttons[3] = True
-        else:
-            window.mouse_buttons.pop(3, None)
-        # Look deltas → window.mouse_rel equivalent
-        if abs(s.look_dx) > 0.1 or abs(s.look_dy) > 0.1:
-            window.mouse_rel = (int(s.look_dx), int(s.look_dy))
-        # Hotbar index
-        if 0 <= s.hotbar_index <= 8:
-            # Window doesn't track hotbar directly; the game applies it.
-            pass
+        keys = window.keys
+        keys[pygame.K_w] = s.move_y > 0.3
+        keys[pygame.K_s] = s.move_y < -0.3
+        keys[pygame.K_d] = s.move_x > 0.3
+        keys[pygame.K_a] = s.move_x < -0.3
+        keys[pygame.K_SPACE] = s.jump
+        keys[pygame.K_LSHIFT] = s.sneak
+        window.mouse_buttons[1] = s.break_held
+        window.mouse_buttons[3] = s.place_held
+        window.mouse_rel = (int(s.look_dx), int(s.look_dy))
 
     def reset(self) -> None:
         self.state.reset_deltas()

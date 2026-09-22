@@ -12,8 +12,7 @@ Loaded/saved as JSON via :func:`load` / :func:`save`.
 from __future__ import annotations
 
 import json
-import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +41,15 @@ class Settings:
         clean = {k: v for k, v in data.items() if k in known}
         return cls(**clean)
 
+    @classmethod
+    def load(cls, path: Path | str | None = None) -> "Settings":
+        """Load settings, preserving the historical ``Settings.load`` API."""
+        return load(path)
+
+    def save(self, path: Path | str | None = None) -> None:
+        """Save this settings instance, preserving the historical API."""
+        save(self, path)
+
 
 def default_path() -> Path:
     here = Path(__file__).resolve().parent
@@ -56,8 +64,11 @@ def load(path: Path | str | None = None) -> Settings:
         return s
     try:
         with p.open("r", encoding="utf-8") as fh:
-            return Settings.from_dict(json.load(fh))
-    except (json.JSONDecodeError, OSError):
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            raise ValueError("settings JSON must contain an object")
+        return Settings.from_dict(data)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
         return Settings()
 
 

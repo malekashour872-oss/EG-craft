@@ -19,11 +19,15 @@ from typing import Optional
 
 
 def _parse_resolution(s: str) -> tuple[int, int]:
-    if "x" in s.lower():
+    try:
         w, h = s.lower().split("x", 1)
-        return int(w), int(h)
-    raise argparse.ArgumentTypeError(
-        f"invalid --res {s!r}, expected WxH e.g. 1280x720")
+        w, h = int(w), int(h)
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError(
+            f"invalid --res {s!r}, expected WxH e.g. 1280x720")
+    if w < 1 or h < 1:
+        raise argparse.ArgumentTypeError("resolution dimensions must be positive")
+    return w, h
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,14 +57,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         os.environ.setdefault("EGCRAFT_HEADLESS", "1")
 
     if args.smoke:
-        # Re-export test_smoke.run under run.py --smoke.
-        import importlib
-        ts = importlib.import_module("test_smoke")
-        return ts.run(args.frames or 300)
+        import test_smoke
+        return test_smoke.run(args.frames or 300)
 
-    # Normal play: settings + main loop
-    from settings import Settings
-    settings = Settings.load()
+    from settings import load
+    settings = load()
     if args.seed is not None:
         settings.seed = args.seed
     if args.res is not None:
@@ -69,7 +70,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     import main as main_mod
-    return main_mod.main()
+    return main_mod.main(settings=settings)
 
 
 if __name__ == "__main__":

@@ -4,12 +4,7 @@
 # written permission is prohibited.
 # هذا الملف مملوك ملكية مالك حسن عاشور — يُمنع النسخ أو التوزيع دون إذن
 
-"""EG Craft — async entry point.
-
-Spec ref: §16.4 — pygbag-safe async loop pattern:
-``asyncio … while running: tick(); await asyncio.sleep(0)``.
-No blocking sleeps or loops.
-"""
+"""EG Craft — async entry point."""
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +25,6 @@ class Game:
         self.settings = settings
         self.headless = headless
         self.window = None  # type: Optional[object]
-        # Each subsystem gets attached in its corresponding task.
         self.world = None
         self.player = None
         self.entities_manager = None
@@ -40,12 +34,11 @@ class Game:
         self.music = None
         self.daynight = None
         self.survival = None
-        self.mode = "survival"  # survival | creative
-        self.state = "splash"   # splash | menu | playing | paused | dead | rights
+        self.mode = "survival"
+        self.state = "splash"
         self.frame_count = 0
-        self.max_frames: Optional[int] = None  # if set, loop exits
-        # Commercial extension
-        self.touch = None  # TouchBridge (engine/touch.py)
+        self.max_frames: Optional[int] = None
+        self.touch = None
         self.save_slots: list[str] = []
         self.stats = {"play_time": 0.0, "blocks_broken": 0,
                       "blocks_placed": 0, "mobs_killed": 0,
@@ -53,7 +46,6 @@ class Game:
         self.version = "2.0.0-commercial"
 
     def init_window(self) -> None:
-        """Create the window + GL context. Called by run()."""
         if self.window is not None:
             return
         if self.headless:
@@ -61,13 +53,9 @@ class Game:
             os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         from engine.window import Window
         self.window = Window(self.settings)
-        # Commercial: also init the touch bridge (no-op on desktop)
         try:
             from engine.touch import TouchBridge
             self.touch = TouchBridge()
-            if self.touch.is_mobile:
-                log.info("Running under pygbag/mobile — "
-                         "touch controls will be applied per-frame.")
         except Exception as exc:  # noqa: BLE001
             log.warning("TouchBridge init failed: %r", exc)
             self.touch = None
@@ -84,16 +72,11 @@ class Game:
 
     def _tick_one(self) -> None:
         self.frame_count += 1
-        # Subsystem tick stubs — wired in their respective tasks.
         if self.window is not None:
             self.window.pump()
-            # Commercial: apply touch input every frame (pygbag builds)
             if self.touch is not None and self.touch.is_mobile:
-                try:
-                    self.touch.apply_to_window(self.window)
-                    self.touch.reset()
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("Touch apply failed: %r", exc)
+                self.touch.apply_to_window(self.window)
+                self.touch.reset()
             self.window.swap()
 
 
@@ -108,84 +91,45 @@ def setup_environment(headless: bool) -> None:
         os.environ.setdefault("SDL_OPENGL_FORWARD_COMPAT", "1")
 
 
-async def _async_main() -> int:
-    settings = make_settings()
+async def _async_main(settings: Settings | None = None) -> int:
+    active_settings = settings or make_settings()
     headless = os.environ.get("EGCRAFT_HEADLESS") == "1"
     setup_environment(headless)
-    game = Game(settings, headless=headless)
+    game = Game(active_settings, headless=headless)
     await game.run()
     return 0
 
 
-def main() -> int:
+def main(settings: Settings | None = None) -> int:
     """Synchronous wrapper that drives the async loop."""
     from game.logging_setup import get_logger
     get_logger()
     try:
-        return asyncio.run(_async_main())
+        return asyncio.run(_async_main(settings))
     except KeyboardInterrupt:
         log.info("Interrupted by user")
         return 0
 
 
-# pygbag entry point: aioapp requires an `async def main()` at module
-# scope (pygbag picks it up automatically when run with `pygbag`).
 async def aio_main() -> int:  # pragma: no cover
     return await _async_main()
 
 
-# ────────────────────────────────────────────────────────────────�[...]
-# Vercel compatibility stub
-# ────────────────────────────────────────────────────────────────�[...]
-# EG Craft is deployed as a STATIC pygbag bundle (Python → WebAssembly),
-# NOT as a Python serverless function. However, when Vercel detects
-# `main.py` + `requirements.txt` at the project root, its Python runtime
-# auto-imports `main` and looks for a top-level ASGI/WSGI `app` object.
-# If that object is missing, the build fails with:
-#     "Error: Found main.py but it does not export a top-level [app]"
-#
-# To satisfy Vercel's build-time check we expose a minimal ASGI v3.0
-# callable named `app`. It is NEVER invoked at runtime — the actual
-# deployment is the static `build/web/` directory produced by pygbag.
-# If a request ever reaches it (e.g. misconfigured routing), it returns
-# a 200 OK pointing the user at the game.
-# ────────────────────────────────────────────────────────────────�[...]
 async def _vercel_asgi_app(scope, receive, send):  # type: ignore[no-untyped-def]
-    """Minimal ASGI v3.0 stub for Vercel build-time auto-detection.
-
-    EG Craft runs as a pygbag WebAssembly bundle, not as a serverless
-    function. This callable exists only so Vercel's Python runtime
-    finds a valid top-level `app` object during the build. It is never
-    reached at runtime.
-    """
     if scope["type"] != "http":
         return
-    await receive()  # consume the request
-    body = (
-        b"<!doctype html><html lang='ar' dir='rtl'><head>"
-        b"<meta charset='utf-8'><title>EG Craft</title></head>"
-        b"<body style='font-family:sans-serif;text-align:center;padding:2rem'>"
-        b"<h1>EG Craft</h1>"
-        b"<p>EG Craft \xd9\x8a\xd8\xb9\xd9\x85\xd9\x84 \xd9\x83\xd8\xaa\xd8\xb7"
-        b"\xd8\xa8\xd9\x8a\xd9\x82 WebAssembly \xd8\xb9\xd8\xa8\xd8\xb1 pygbag"
-        b"\xd8\x8c \xd9\x88\xd9\x84\xd9\x8a\xd8\xb3 \xd9\x83\xd8\xaf\xd8\xa7"
-        b"\xd8\xa9 Python serverless.</p>"
-        b"<p><a href='/'>\xd8\xa7\xd9\x84\xd8\xb9\xd9\x88\xd8\xaf\xd8\xa9 "
-        b"\xd9\x84\xd9\x84\xd8\xb9\xd8\xa8\xd8\xa9</a></p>"
-        b"</body></html>"
-    )
-    await send({
-        "type": "http.response.start",
-        "status": 200,
-        "headers": [
-            [b"content-type", b"text/html; charset=utf-8"],
-            [b"content-length", str(len(body)).encode("ascii")],
-        ],
-    })
+    await receive()
+    body = (b"<!doctype html><html lang='ar' dir='rtl'><head>"
+            b"<meta charset='utf-8'><title>EG Craft</title></head>"
+            b"<body><h1>EG Craft</h1>"
+            b"<p>EG Craft يعمل كتطبيق WebAssembly عبر pygbag.</p>"
+            b"<p><a href='/'>العودة للعبة</a></p></body></html>")
+    await send({"type": "http.response.start", "status": 200,
+                "headers": [[b"content-type", b"text/html; charset=utf-8"],
+                             [b"content-length", str(len(body)).encode("ascii")]]})
     await send({"type": "http.response.body", "body": body})
 
 
-# Top-level `app` object — satisfies Vercel's auto-detection check.
 app = _vercel_asgi_app
 
 
