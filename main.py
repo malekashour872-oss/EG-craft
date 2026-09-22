@@ -119,11 +119,11 @@ async def _vercel_asgi_app(scope, receive, send):  # type: ignore[no-untyped-def
     if scope["type"] != "http":
         return
     await receive()
-    body = (b"<!doctype html><html lang='ar' dir='rtl'><head>"
-            b"<meta charset='utf-8'><title>EG Craft</title></head>"
-            b"<body><h1>EG Craft</h1>"
-            b"<p>EG Craft يعمل كتطبيق WebAssembly عبر pygbag.</p>"
-            b"<p><a href='/'>العودة للعبة</a></p></body></html>")
+    body = ("<!doctype html><html lang='ar' dir='rtl'><head>"
+            "<meta charset='utf-8'><title>EG Craft</title></head>"
+            "<body><h1>EG Craft</h1>"
+            "<p>EG Craft يعمل كتطبيق WebAssembly عبر pygbag.</p>"
+            "<p><a href='/'>العودة للعبة</a></p></body></html>").encode("utf-8")
     await send({"type": "http.response.start", "status": 200,
                 "headers": [[b"content-type", b"text/html; charset=utf-8"],
                              [b"content-length", str(len(body)).encode("ascii")]]})
